@@ -7,49 +7,106 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
-import type {
-  AuthContextValue,
-  AuthResult,
-  AuthUser,
-  StoredCredential,
-} from "../types/auth";
-import { isValidEmail, isValidPassword } from "../utils/validators";
+import axios from "axios";
+import type { AuthContextValue, AuthResult, AuthUser } from "../types/auth";
 
-// NOTE: This is a client-side-only authentication simulation for the
-// front-end milestone of this project. There is no backend yet, so
-// credentials are persisted in the browser's localStorage rather than
-// a real database, and passwords are stored in plain text. This is
-// NOT secure and must be replaced once the real backend/API is built.
+// ----------------------------------------------------------------------------
+// Real backend authentication.
+//
+// This replaces the previous localStorage-simulated "fake users database"
+// with actual calls to the Express + JWT backend. Only two things are
+// persisted client-side now:
+//   1. The JWT token returned by the backend
+//   2. The logged-in user object returned alongside it
+//
+// The PUBLIC API of this module is unchanged: AuthProvider, useAuth, and
+// the login/register/logout functions all keep the exact same signatures,
+// so LoginPage, RegisterPage, DashboardPage, Navbar, and ProtectedRoute
+// all continue to work without modification.
+// ----------------------------------------------------------------------------
 
-const SESSION_KEY = "afnd_session_user";
-const USERS_DB_KEY = "afnd_users_db";
+// Base URL for the Express backend. Read from the environment so the
+// same frontend build works for local development and production.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-function readUsersDb(): StoredCredential[] {
+// Authentication endpoint.
+const AUTH_API_BASE_URL = `${API_BASE_URL}/api/auth`;
+
+const TOKEN_KEY = "afnd_token";
+const USER_KEY = "afnd_user";
+
+/** Shape of the backend's response for both /login and /register. */
+interface AuthApiResponse {
+  success: boolean;
+  message?: string;
+  token?: string;
+  data?: AuthUser;
+}
+
+// --- localStorage helpers (guarded against unavailable/corrupt storage) ---
+
+function readStoredToken(): string | null {
   try {
-    const raw = localStorage.getItem(USERS_DB_KEY);
-    return raw ? (JSON.parse(raw) as StoredCredential[]) : [];
+    return localStorage.getItem(TOKEN_KEY);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function writeUsersDb(users: StoredCredential[]): void {
-  localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
-}
-
-function readSession(): AuthUser | null {
+function readStoredUser(): AuthUser | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(USER_KEY);
     return raw ? (JSON.parse(raw) as AuthUser) : null;
   } catch {
     return null;
   }
 }
 
-function generateId(): string {
-  return `usr_${Date.now().toString(36)}_${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
+function persistSession(token: string, user: AuthUser): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    // Storage may be unavailable (e.g. Safari private mode); the user
+    // stays logged in for the current tab via React state regardless.
+  }
+}
+
+function clearSession(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    // Nothing further we can do if localStorage itself is unavailable.
+  }
+}
+
+/** Attaches (or removes) the JWT on the default axios instance so every
+ *  subsequent request automatically includes it, without every call site
+ *  having to set the header manually. */
+function applyAuthHeader(token: string | null): void {
+  if (token) {
+    axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete axios.defaults.headers.common.Authorization;
+  }
+}
+
+/** Extracts a user-friendly error message from an Axios error, falling
+ *  back sensibly if the backend didn't send a structured message. */
+function extractErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    if (error.response) {
+      const data = error.response.data as Partial<AuthApiResponse> | undefined;
+      return data?.message || `Request failed with status ${error.response.status}.`;
+    }
+    if (error.request) {
+      return "Could not reach the server. Check your connection and try again.";
+    }
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -58,40 +115,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // --- Restore session on refresh ("remember logged-in user") ---
   useEffect(() => {
-    setUser(readSession());
+    const token = readStoredToken();
+    const storedUser = readStoredUser();
+
+    if (token && storedUser) {
+      applyAuthHeader(token);
+      setUser(storedUser);
+    }
+
     setIsLoading(false);
+  }, []);
+
+  // --- Keep auth state in sync across browser tabs ---
+  // If the user logs out (or in) in one tab, other open tabs pick up
+  // the change instantly instead of holding onto a stale session.
+  useEffect(() => {
+    function handleStorageChange(event: StorageEvent) {
+      if (event.key !== USER_KEY && event.key !== TOKEN_KEY) return;
+
+      const token = readStoredToken();
+      const storedUser = readStoredUser();
+
+      if (token && storedUser) {
+        applyAuthHeader(token);
+        setUser(storedUser);
+      } else {
+        applyAuthHeader(null);
+        setUser(null);
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
-      const normalizedEmail = email.trim().toLowerCase();
+      try {
+        const response = await axios.post<AuthApiResponse>(
+          `${AUTH_API_BASE_URL}/login`,
+          { email: email.trim().toLowerCase(), password }
+        );
 
-      if (!isValidEmail(normalizedEmail)) {
-        return { success: false, error: "Enter a valid email address." };
-      }
-      if (!isValidPassword(password)) {
+        const payload = response.data;
+
+        if (!payload?.success || !payload.token || !payload.data) {
+          return {
+            success: false,
+            error: payload?.message || "Login failed. Please try again.",
+          };
+        }
+
+        persistSession(payload.token, payload.data);
+        applyAuthHeader(payload.token);
+        setUser(payload.data);
+
+        return { success: true };
+      } catch (error) {
         return {
           success: false,
-          error: "Password must be at least 8 characters.",
+          error: extractErrorMessage(error, "Invalid email or password."),
         };
       }
-
-      const users = readUsersDb();
-      const match = users.find((u) => u.email === normalizedEmail);
-
-      if (!match || match.password !== password) {
-        return { success: false, error: "Invalid email or password." };
-      }
-
-      const authUser: AuthUser = {
-        id: match.id,
-        name: match.name,
-        email: match.email,
-      };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-      setUser(authUser);
-      return { success: true };
     },
     []
   );
@@ -102,52 +189,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string
     ): Promise<AuthResult> => {
-      const normalizedEmail = email.trim().toLowerCase();
-      const trimmedName = name.trim();
+      try {
+        const response = await axios.post<AuthApiResponse>(
+          `${AUTH_API_BASE_URL}/register`,
+          {
+            name: name.trim(),
+            email: email.trim().toLowerCase(),
+            password,
+          }
+        );
 
-      if (!trimmedName) {
-        return { success: false, error: "Full name is required." };
-      }
-      if (!isValidEmail(normalizedEmail)) {
-        return { success: false, error: "Enter a valid email address." };
-      }
-      if (!isValidPassword(password)) {
+        const payload = response.data;
+
+        if (!payload?.success || !payload.token || !payload.data) {
+          return {
+            success: false,
+            error: payload?.message || "Registration failed. Please try again.",
+          };
+        }
+
+        persistSession(payload.token, payload.data);
+        applyAuthHeader(payload.token);
+        setUser(payload.data);
+
+        return { success: true };
+      } catch (error) {
         return {
           success: false,
-          error: "Password must be at least 8 characters.",
+          error: extractErrorMessage(
+            error,
+            "Could not create your account. Please try again."
+          ),
         };
       }
-
-      const users = readUsersDb();
-      if (users.some((u) => u.email === normalizedEmail)) {
-        return {
-          success: false,
-          error: "An account with this email already exists.",
-        };
-      }
-
-      const newCredential: StoredCredential = {
-        id: generateId(),
-        name: trimmedName,
-        email: normalizedEmail,
-        password,
-      };
-      writeUsersDb([...users, newCredential]);
-
-      const authUser: AuthUser = {
-        id: newCredential.id,
-        name: newCredential.name,
-        email: newCredential.email,
-      };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-      setUser(authUser);
-      return { success: true };
     },
     []
   );
 
+  // Proper logout: clears the persisted token/user, strips the axios
+  // auth header, and resets in-memory state so ProtectedRoute redirects
+  // immediately and no stale user data lingers.
   const logout = useCallback(() => {
-    localStorage.removeItem(SESSION_KEY);
+    clearSession();
+    applyAuthHeader(null);
     setUser(null);
   }, []);
 
@@ -166,6 +250,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * Hook for consuming the auth context. Throws clearly if used outside
+ * an AuthProvider, so misuse fails fast during development instead of
+ * silently returning undefined fields.
+ */
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
