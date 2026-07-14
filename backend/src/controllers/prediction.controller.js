@@ -174,3 +174,103 @@ export const deleteAllPredictionHistory = asyncHandler(async (req, res) => {
     data: { deletedCount: result.deletedCount },
   });
 });
+
+/**
+ * GET /api/prediction/statistics
+ * Protected route — requires a valid JWT (see prediction.routes.js).
+ *
+ * Returns aggregate statistics computed ONLY over the currently
+ * authenticated user's predictions (req.user.id):
+ *   - totalPredictions
+ *   - fakeCount / realCount
+ *   - averageConfidence (0–1 scale, matching how confidence is stored)
+ *   - fakePercentage / realPercentage
+ *   - highestConfidence / lowestConfidence
+ *   - latestPrediction (the single most recent document)
+ *
+ * A single aggregation pipeline is used (via $facet) so the summary
+ * numbers and the latest-prediction lookup are computed in one round
+ * trip to MongoDB rather than two separate queries.
+ */
+export const getPredictionStatistics = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new ApiError(
+      401,
+      "Authentication required to view prediction statistics."
+    );
+  }
+
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+
+  const [aggregationResult] = await Prediction.aggregate([
+    { $match: { user: userObjectId } },
+    {
+      $facet: {
+        summary: [
+          {
+            $group: {
+              _id: null,
+              totalPredictions: { $sum: 1 },
+              fakeCount: {
+                $sum: { $cond: [{ $eq: ["$prediction", "Fake"] }, 1, 0] },
+              },
+              realCount: {
+                $sum: { $cond: [{ $eq: ["$prediction", "Real"] }, 1, 0] },
+              },
+              averageConfidence: { $avg: "$confidence" },
+              highestConfidence: { $max: "$confidence" },
+              lowestConfidence: { $min: "$confidence" },
+            },
+          },
+        ],
+        latest: [{ $sort: { createdAt: -1 } }, { $limit: 1 }],
+      },
+    },
+  ]);
+
+  const summary = aggregationResult?.summary?.[0] ?? null;
+  const latestPrediction = aggregationResult?.latest?.[0] ?? null;
+
+  const totalPredictions = summary?.totalPredictions ?? 0;
+  const fakeCount = summary?.fakeCount ?? 0;
+  const realCount = summary?.realCount ?? 0;
+  const averageConfidence = summary?.averageConfidence ?? 0;
+  const highestConfidence = summary?.highestConfidence ?? 0;
+  const lowestConfidence = summary?.lowestConfidence ?? 0;
+
+  // Percentages are only meaningful once there's at least one
+  // prediction — avoid a divide-by-zero and just report 0 instead.
+  const fakePercentage =
+    totalPredictions > 0 ? (fakeCount / totalPredictions) * 100 : 0;
+  const realPercentage =
+    totalPredictions > 0 ? (realCount / totalPredictions) * 100 : 0;
+
+  sendSuccess(res, {
+    statusCode: 200,
+    message: "Prediction statistics retrieved successfully",
+    data: {
+      totalPredictions,
+      fakeCount,
+      realCount,
+      averageConfidence:
+      
+  Math.round((averageConfidence ?? 0) * 10000) / 100,
+
+  fakePercentage:
+    Math.round(fakePercentage * 100) / 100,
+
+  realPercentage:
+    Math.round(realPercentage * 100) / 100,
+
+  highestConfidence:
+    Math.round((highestConfidence ?? 0) * 10000) / 100,
+
+  lowestConfidence:
+    Math.round((lowestConfidence ?? 0) * 10000) / 100,
+
+  latestPrediction,
+    },
+  });
+});

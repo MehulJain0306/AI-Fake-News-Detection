@@ -5,6 +5,7 @@ import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
+  BarChart3,
   CheckCircle2,
   Eraser,
   History,
@@ -18,7 +19,10 @@ import {
 import Button from "../components/common/Button";
 import GlassCard from "../components/common/GlassCard";
 import { useAuth } from "../context/AuthContext";
-import type { PredictionApiResponse, PredictionResult } from "../types/prediction";
+import type {
+  PredictionApiResponse,
+  PredictionResult,
+} from "../types/prediction";
 
 // --------------------------------------------------------------------------
 // Config
@@ -56,13 +60,13 @@ const MAX_LENGTH = 10000;
  */
 async function savePredictionToHistory(
   text: string,
-  result: PredictionResult
+  result: PredictionResult,
 ): Promise<void> {
   try {
     await axios.post(
       SAVE_HISTORY_ENDPOINT,
       { text, prediction: result.prediction, confidence: result.confidence },
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
     // Deliberately swallowed — history saving must never surface to
@@ -125,14 +129,15 @@ export default function DashboardPage() {
       const response = await axios.post<PredictionApiResponse>(
         PREDICTION_ENDPOINT,
         { text: articleText.trim() },
-        { headers: { "Content-Type": "application/json" } }
+        { headers: { "Content-Type": "application/json" } },
       );
 
       const payload = response.data;
 
       if (!payload?.success || !payload.data?.prediction) {
         throw new Error(
-          payload?.message || "The server response was missing prediction data."
+          payload?.message ||
+            "The server response was missing prediction data.",
         );
       }
 
@@ -150,7 +155,8 @@ export default function DashboardPage() {
           // Server responded with a non-2xx status code.
           message =
             (err.response.data as Partial<PredictionApiResponse> | undefined)
-              ?.message || `Analysis failed with status ${err.response.status}.`;
+              ?.message ||
+            `Analysis failed with status ${err.response.status}.`;
         } else if (err.request) {
           // Request was made but no response was received.
           message =
@@ -219,6 +225,15 @@ export default function DashboardPage() {
             onClick={() => navigate("/history")}
           >
             History
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="md"
+            icon={<BarChart3 className="h-4 w-4" />}
+            onClick={() => navigate("/statistics")}
+          >
+            Statistics
           </Button>
 
           <Button
@@ -301,7 +316,8 @@ export default function DashboardPage() {
                       isTooLong ? "font-medium text-verdict-fake" : undefined
                     }
                   >
-                    {trimmedLength.toLocaleString()} / {MAX_LENGTH.toLocaleString()}
+                    {trimmedLength.toLocaleString()} /{" "}
+                    {MAX_LENGTH.toLocaleString()}
                   </span>
                 </div>
               </div>

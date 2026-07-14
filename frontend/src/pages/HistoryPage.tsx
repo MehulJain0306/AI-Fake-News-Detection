@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   Clock,
   FileSearch,
@@ -141,7 +142,11 @@ const listContainerVariants = {
 
 const listItemVariants = {
   hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: "easeOut" as const },
+  },
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
@@ -155,9 +160,8 @@ export default function HistoryPage() {
   // pendingDelete drives the confirmation modal: non-null means "show
   // the modal for this item". isDeleting tracks the in-flight request
   // so the modal can show a loading state and block double-submits.
-  const [pendingDelete, setPendingDelete] = useState<PredictionHistoryItem | null>(
-    null
-  );
+  const [pendingDelete, setPendingDelete] =
+    useState<PredictionHistoryItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -184,14 +188,13 @@ export default function HistoryPage() {
     setErrorMessage(null);
 
     try {
-      const response = await axios.get<PredictionHistoryApiResponse>(
-        HISTORY_ENDPOINT
-      );
+      const response =
+        await axios.get<PredictionHistoryApiResponse>(HISTORY_ENDPOINT);
       const payload = response.data;
 
       if (!payload?.success || !Array.isArray(payload.data)) {
         throw new Error(
-          payload?.message || "The server response was missing history data."
+          payload?.message || "The server response was missing history data.",
         );
       }
 
@@ -199,7 +202,8 @@ export default function HistoryPage() {
       // way, but guarding here keeps the UI correct even if that ever
       // changes upstream.
       const sorted = [...payload.data].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
       setHistory(sorted);
@@ -210,8 +214,11 @@ export default function HistoryPage() {
       if (axios.isAxiosError(err)) {
         if (err.response) {
           message =
-            (err.response.data as Partial<PredictionHistoryApiResponse> | undefined)
-              ?.message || `Request failed with status ${err.response.status}.`;
+            (
+              err.response.data as
+                | Partial<PredictionHistoryApiResponse>
+                | undefined
+            )?.message || `Request failed with status ${err.response.status}.`;
         } else if (err.request) {
           message =
             "Could not reach the server. Check your connection and try again.";
@@ -232,7 +239,8 @@ export default function HistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openDeleteModal = (item: PredictionHistoryItem) => setPendingDelete(item);
+  const openDeleteModal = (item: PredictionHistoryItem) =>
+    setPendingDelete(item);
 
   /** Closes the confirmation modal — ignored while a delete is in flight. */
   const closeDeleteModal = () => {
@@ -254,12 +262,12 @@ export default function HistoryPage() {
 
     try {
       const response = await axios.delete<DeletePredictionApiResponse>(
-        `${DELETE_PREDICTION_BASE_ENDPOINT}/${pendingDelete._id}`
+        `${DELETE_PREDICTION_BASE_ENDPOINT}/${pendingDelete._id}`,
       );
 
       if (!response.data?.success) {
         throw new Error(
-          response.data?.message || "Failed to delete this prediction."
+          response.data?.message || "Failed to delete this prediction.",
         );
       }
 
@@ -273,8 +281,11 @@ export default function HistoryPage() {
       if (axios.isAxiosError(err)) {
         if (err.response) {
           message =
-            (err.response.data as Partial<DeletePredictionApiResponse> | undefined)
-              ?.message || `Request failed with status ${err.response.status}.`;
+            (
+              err.response.data as
+                | Partial<DeletePredictionApiResponse>
+                | undefined
+            )?.message || `Request failed with status ${err.response.status}.`;
         } else if (err.request) {
           message =
             "Could not reach the server. Check your connection and try again.";
@@ -310,13 +321,12 @@ export default function HistoryPage() {
     setIsDeletingAll(true);
 
     try {
-      const response = await axios.delete<DeleteAllHistoryApiResponse>(
-        HISTORY_ENDPOINT
-      );
+      const response =
+        await axios.delete<DeleteAllHistoryApiResponse>(HISTORY_ENDPOINT);
 
       if (!response.data?.success) {
         throw new Error(
-          response.data?.message || "Failed to delete your prediction history."
+          response.data?.message || "Failed to delete your prediction history.",
         );
       }
 
@@ -332,8 +342,11 @@ export default function HistoryPage() {
       if (axios.isAxiosError(err)) {
         if (err.response) {
           message =
-            (err.response.data as Partial<DeleteAllHistoryApiResponse> | undefined)
-              ?.message || `Request failed with status ${err.response.status}.`;
+            (
+              err.response.data as
+                | Partial<DeleteAllHistoryApiResponse>
+                | undefined
+            )?.message || `Request failed with status ${err.response.status}.`;
         } else if (err.request) {
           message =
             "Could not reach the server. Check your connection and try again.";
@@ -394,8 +407,18 @@ export default function HistoryPage() {
             disabled={!hasAnyHistory || status !== "ready"}
             className="disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Clear History
+            Delete All History
           </Button>
+
+          <Link to="/statistics">
+            <Button
+              variant="secondary"
+              size="md"
+              icon={<BarChart3 className="h-4 w-4" />}
+            >
+              Statistics
+            </Button>
+          </Link>
 
           <Link to="/dashboard">
             <Button variant="secondary" size="md">
@@ -499,7 +522,10 @@ export default function HistoryPage() {
           >
             <GlassCard className="flex flex-col items-center gap-4 p-16 text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04] border border-border">
-                <FileSearch className="h-7 w-7 text-ink-faint" strokeWidth={1.7} />
+                <FileSearch
+                  className="h-7 w-7 text-ink-faint"
+                  strokeWidth={1.7}
+                />
               </span>
               <div>
                 <p className="text-lg font-semibold text-ink">
@@ -653,7 +679,10 @@ export default function HistoryPage() {
             >
               <GlassCard className="p-6">
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-verdict-fake/15 ring-1 ring-verdict-fake/20">
-                  <Trash2 className="h-6 w-6 text-verdict-fake" strokeWidth={2} />
+                  <Trash2
+                    className="h-6 w-6 text-verdict-fake"
+                    strokeWidth={2}
+                  />
                 </span>
 
                 <h2
