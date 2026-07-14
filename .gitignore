@@ -1,0 +1,48 @@
+# =========================
+# Node
+# =========================
+node_modules/
+npm-debug.log*
+
+# =========================
+# Python
+# =========================
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# =========================
+# Environment files
+# =========================
+.env
+backend/.env
+frontend/.env
+ai_model/.env
+
+# Keep examples
+!backend/.env.example
+!frontend/.env.example
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+# =========================
+# Build
+# =========================
+dist/
+build/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# VS Code
+# =========================
+.vscode/settings.json
