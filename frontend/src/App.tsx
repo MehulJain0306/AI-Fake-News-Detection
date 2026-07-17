@@ -6,6 +6,7 @@ import DashboardPage from "./pages/DashboardPage";
 import HistoryPage from "./pages/HistoryPage";
 import StatisticsPage from "./pages/StatisticsPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import NotFoundPage from "./pages/NotFoundPage";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
