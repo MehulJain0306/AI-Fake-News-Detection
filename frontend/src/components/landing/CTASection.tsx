@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import Button from "../common/Button";
 import { useNavigate } from "react-router-dom";
 
