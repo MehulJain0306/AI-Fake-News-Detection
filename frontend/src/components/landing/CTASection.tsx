@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import Button from "../common/Button";
+import { useNavigate } from "react-router-dom";
 
 export default function CTASection() {
+  const navigate = useNavigate();
   return (
     <section className="relative py-20 sm:py-28">
       <div className="section-shell">
@@ -30,19 +32,32 @@ export default function CTASection() {
             Stop guessing. Start verifying.
           </h2>
           <p className="relative mx-auto mt-4 max-w-md text-base leading-relaxed text-ink-muted">
-            Run your first check in seconds — no credit card, no
-            commitment, just a straight answer.
+            Run your first check in seconds — no credit card, no commitment,
+            just a straight answer.
           </p>
 
           <div className="relative mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
               variant="primary"
               size="lg"
-              icon={<ArrowRight className="h-4 w-4" />}
+              onClick={() => {
+                const token = localStorage.getItem("token");
+
+                if (token) navigate("/dashboard");
+                else navigate("/login");
+              }}
             >
               Start Detecting Now
             </Button>
-            <Button variant="secondary" size="lg">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() =>
+                document
+                  .getElementById("features")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
               Learn More
             </Button>
           </div>
