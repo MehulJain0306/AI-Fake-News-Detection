@@ -2,8 +2,10 @@ import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import Button from "../common/Button";
 import ScanDemo from "./ScanDemo";
+import { useNavigate } from "react-router-dom";
 
 export default function HeroSection() {
+  const navigate = useNavigate();
   return (
     <section
       id="home"
@@ -20,7 +22,8 @@ export default function HeroSection() {
           backgroundImage:
             "linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)",
           backgroundSize: "56px 56px",
-          maskImage: "radial-gradient(ellipse 70% 50% at 50% 0%, black 40%, transparent 100%)",
+          maskImage:
+            "radial-gradient(ellipse 70% 50% at 50% 0%, black 40%, transparent 100%)",
         }}
       />
 
@@ -44,8 +47,7 @@ export default function HeroSection() {
           >
             Know what's real
             <br />
-            before you{" "}
-            <span className="text-gradient">share it.</span>
+            before you <span className="text-gradient">share it.</span>
           </motion.h1>
 
           <motion.p
@@ -54,9 +56,9 @@ export default function HeroSection() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="mt-6 max-w-lg text-base leading-relaxed text-ink-muted sm:text-lg"
           >
-            Paste any article or link and our AI model scores its
-            credibility in seconds — backed by a transparent confidence
-            score and a plain-language explanation, not a black box.
+            Paste any article or link and our AI model scores its credibility in
+            seconds — backed by a transparent confidence score and a
+            plain-language explanation, not a black box.
           </motion.p>
 
           <motion.div
@@ -69,10 +71,28 @@ export default function HeroSection() {
               variant="primary"
               size="lg"
               icon={<ArrowRight className="h-4 w-4" />}
+              onClick={() => {
+                const token = localStorage.getItem("token");
+
+                if (token) {
+                  navigate("/dashboard");
+                } else {
+                  navigate("/login");
+                }
+              }}
             >
               Analyze News
             </Button>
-            <Button variant="secondary" size="lg">
+
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => {
+                document
+                  .getElementById("features")
+                  ?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
               Learn More
             </Button>
           </motion.div>
